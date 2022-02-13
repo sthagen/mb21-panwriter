@@ -1,5 +1,5 @@
 import { spawn, SpawnOptionsWithoutStdio } from 'child_process'
-import { BrowserWindow, clipboard, dialog } from 'electron'
+import { BrowserWindow, clipboard, dialog, ipcMain } from 'electron'
 import { basename, dirname, extname } from 'path'
 import { Doc, JSON, Meta } from '../../src/appState/AppState'
 import { readDataDirFile } from '../dataDir';
@@ -58,22 +58,56 @@ export const fileExportLikePrevious = (win: CustomBrowserWindow, doc: Doc) => {
   }
 }
 
-export const fileExportToClipboard = (win: BrowserWindow, doc: Doc) => {
+const createModal = <T>(parent: CustomBrowserWindow): Promise<T> => {
+  const modal = new BrowserWindow({
+    height: 1000
+  , modal: true
+  , parent
+  , show: false
+  , width: 800
+  , webPreferences: {
+      preload: __dirname + '/../preloadModal.js'
+    , sandbox: true
+    }
+  })
+  modal.loadFile('modals/chooseFormat.html')
+
+  return new Promise<T>((resolve, reject) => {
+    modal.once('ready-to-show', () => {
+      modal.show()
+      ipcMain.on('sendFormat', (_event, format: T) => {
+        resolve(format)
+      })
+    })
+    modal.once('closed', () => {
+      reject()
+    })
+  })
+}
+
+export const fileExportToClipboard = async (win: BrowserWindow, doc: Doc) => {
   const { meta }  = doc
-  const format = meta.output && Object.keys(meta.output)[0]
-  if (format) {
-    fileExport(win, doc, {toClipboardFormat: format})
-  } else {
-    dialog.showMessageBox(win, {
-      type: 'error'
-    , message: 'Couldn\'t find output format in YAML metadata'
-    , detail: `Add something like the following at the top of your document:
+
+
+  try {
+    const format = await createModal<string>(win)
+
+    // const format = meta.output && Object.keys(meta.output)[0]
+    if (format) {
+      fileExport(win, doc, {toClipboardFormat: format})
+    } else {
+      dialog.showMessageBox(win, {
+        type: 'error'
+      , message: 'Couldn\'t find output format in YAML metadata'
+      , detail: `Add something like the following at the top of your document:
 
 ---
 output:
   html: true
 ---`
-    })
+      })
+    }
+  } catch (e) {
   }
 }
 
