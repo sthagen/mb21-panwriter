@@ -58,24 +58,29 @@ export const fileExportLikePrevious = (win: CustomBrowserWindow, doc: Doc) => {
   }
 }
 
-const createModal = <T>(parent: CustomBrowserWindow): Promise<T> => {
+const showModalWindow = <T>(parent: CustomBrowserWindow): Promise<T> => {
   const modal = new BrowserWindow({
-    height: 1000
+    height: 280
   , modal: true
   , parent
+  , resizable: false
   , show: false
-  , width: 800
+  , width: 300
   , webPreferences: {
-      preload: __dirname + '/../preloadModal.js'
+      preload: __dirname + '/../preload.js'
     , sandbox: true
     }
   })
-  modal.loadFile('modals/chooseFormat.html')
+  if (!!process.env.ELECTRON_IS_DEV) {
+    modal.loadURL('http://localhost:3000/index.html?modal=chooseFormat')
+  } else {
+    modal.loadURL(`file://${__dirname}/../index.html?modal=chooseFormat`)
+  }
 
   return new Promise<T>((resolve, reject) => {
     modal.once('ready-to-show', () => {
       modal.show()
-      ipcMain.on('sendFormat', (_event, format: T) => {
+      ipcMain.on('chooseFormat', (_event, format: T) => {
         resolve(format)
       })
     })
@@ -90,7 +95,8 @@ export const fileExportToClipboard = async (win: BrowserWindow, doc: Doc) => {
 
 
   try {
-    const format = await createModal<string>(win)
+    const format = await showModalWindow<string>(win)
+    console.log({format})
 
     // const format = meta.output && Object.keys(meta.output)[0]
     if (format) {
